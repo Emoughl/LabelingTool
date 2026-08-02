@@ -426,6 +426,15 @@ class LabelTool:
             return
 
         note = self.current_note_text()
+        if not note:
+            proceed = messagebox.askyesno(
+                "Chưa chọn ghi chú",
+                "Chưa chọn ghi chú (mưa / buổi sáng / buổi tối).\n"
+                "Đồng ý tiếp tục gán nhãn không có ghi chú?"
+            )
+            if not proceed:
+                return
+            
         label_name_en = CLASS_NAME_EN.get(label_id, label_name)
         batch = []
         with open(self.output_csv, "a", newline="", encoding="utf-8") as f:
