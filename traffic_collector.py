@@ -11,26 +11,15 @@ from PIL import Image
 from io import BytesIO
 from datetime import datetime
 
-# ==================================================
 # CAMERA
-# ==================================================
-
 CAMERA_ID = "5d9ddd49766c880017188c94"
 
 BASE_URL = f"https://giaothong.hochiminhcity.gov.vn/render/ImageHandler.ashx?id={CAMERA_ID}"
-
-# ==================================================
-# THƯ MỤC LƯU
-# ==================================================
 
 SAVE_DIR = "images"
 CSV_FILE = "metadata.csv"
 
 os.makedirs(SAVE_DIR, exist_ok=True)
-
-# ==================================================
-# REQUEST SESSION
-# ==================================================
 
 session = requests.Session()
 
@@ -59,19 +48,11 @@ headers = {
     "Referer": "https://giaothong.hochiminhcity.gov.vn/"
 }
 
-# ==================================================
-# BIẾN
-# ==================================================
-
 last_hash = None
 
 saved = 0
 duplicate = 0
 errors = 0
-
-# ==================================================
-# TẠO FILE CSV
-# ==================================================
 
 if not os.path.exists(CSV_FILE):
     with open(CSV_FILE, "w", newline="", encoding="utf-8") as f:
@@ -86,10 +67,6 @@ if not os.path.exists(CSV_FILE):
 print("=" * 50)
 print("Traffic Collector Started")
 print("=" * 50)
-
-# ==================================================
-# LOOP
-# ==================================================
 
 while True:
 
@@ -109,7 +86,6 @@ while True:
 
             print(f"HTTP Error: {response.status_code}")
             errors += 1
-            time.sleep(10)
             continue
 
         img = response.content
@@ -136,9 +112,15 @@ while True:
 
             image = Image.open(BytesIO(img))
 
-            filename = datetime.now().strftime("%Y%m%d_%H%M%S") + ".jpg"
+            now = datetime.now()
 
-            filepath = os.path.join(SAVE_DIR, filename)
+            day_folder = os.path.join(SAVE_DIR, now.strftime("%Y-%m-%d"))
+
+            os.makedirs(day_folder, exist_ok=True)
+
+            filename = now.strftime("%Y%m%d_%H%M%S") + ".jpg"
+
+            filepath = os.path.join(day_folder, filename)
 
             image.save(filepath)
 

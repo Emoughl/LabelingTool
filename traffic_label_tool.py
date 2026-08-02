@@ -5,7 +5,7 @@ from tkinter import messagebox
 from PIL import Image, ImageTk
 
 IMAGE_DIR = "images"
-OUTPUT_CSV = "labels.csv"
+OUTPUT_DIR = "output"
 
 CLASSES = [
     (0, "Rất thông thoáng", "Hầu như không có xe, chạy tốc độ cao, khoảng cách xe rất lớn"),
@@ -15,34 +15,140 @@ CLASSES = [
     (4, "Kẹt xe",           "Xe nối đuôi kín đường hoặc gần như đứng yên"),
 ]
 
+TIME_OF_DAY_OPTIONS = ["Buổi sáng", "Buổi tối"]
+
+CLASS_NAME_EN = {
+    0: "Free_Flow",
+    1: "Light_Traffic",
+    2: "Moderate_Traffic",
+    3: "Heavy_Traffic",
+    4: "Traffic_Jam",
+}
+
+RAIN_NOTE_EN = "Rain"
+
+TIME_OF_DAY_EN = {
+    "Buổi sáng": "Morning",
+    "Buổi tối": "Evening",
+}
+
 GRID_COLS = 5
 GRID_ROWS = 4
 THUMB_SIZE = (160, 120)
 
 IMAGES_PER_PAGE = GRID_COLS * GRID_ROWS
 
+CSV_HEADER = ["filename", "label_id", "label_name", "note", "filepath"]
+
+
+def get_date_folders():
+    if not os.path.isdir(IMAGE_DIR):
+        return []
+    return sorted(
+        d for d in os.listdir(IMAGE_DIR)
+        if os.path.isdir(os.path.join(IMAGE_DIR, d))
+    )
+
+
+def output_csv_path(date_str):
+    return os.path.join(OUTPUT_DIR, f"labels({date_str}).csv")
+
+
+def load_labeled_filenames(date_str):
+    labeled = set()
+    csv_path = output_csv_path(date_str)
+    if os.path.exists(csv_path):
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.reader(f)
+            next(reader, None)
+            for row in reader:
+                if row:
+                    labeled.add(row[0])
+    return labeled
+
+class DateSelector:
+    def __init__(self, root, on_select):
+        self.root = root
+        self.on_select = on_select
+
+        root.title("Chọn tập dữ liệu theo ngày")
+        root.geometry("560x600")
+
+        tk.Label(
+            root, text="Chọn ngày dữ liệu để gán nhãn",
+            font=("Arial", 14, "bold")
+        ).pack(pady=15)
+
+        container = tk.Frame(root)
+        container.pack(fill="both", expand=True, padx=20, pady=10)
+
+        dates = get_date_folders()
+
+        if not dates:
+            tk.Label(
+                container,
+                text=f"Không tìm thấy thư mục ngày nào trong '{IMAGE_DIR}'.\n"
+                     f"Hãy đảm bảo ảnh được lưu dạng {IMAGE_DIR}/YYYY-MM-DD/*.jpg",
+                fg="#a00", wraplength=480, justify="left"
+            ).pack(pady=20)
+            return
+
+        canvas = tk.Canvas(container, highlightthickness=0)
+        scrollbar = tk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas)
+
+        scroll_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        for d in dates:
+            folder = os.path.join(IMAGE_DIR, d)
+            images = [
+                f for f in os.listdir(folder)
+                if f.lower().endswith((".jpg", ".jpeg", ".png"))
+            ]
+            total = len(images)
+            labeled = load_labeled_filenames(d)
+            labeled_count = sum(1 for f in images if f in labeled)
+
+            text = f"{d}    ({labeled_count}/{total} đã gán nhãn)"
+            btn = tk.Button(
+                scroll_frame, text=text, font=("Arial", 11), height=2,
+                anchor="w", padx=15,
+                command=lambda dd=d: self.on_select(dd)
+            )
+            btn.pack(fill="x", pady=3)
 
 class LabelTool:
-    def __init__(self, root):
+    def __init__(self, root, date_str, on_back):
         self.root = root
-        self.root.title("Traffic Image Labeling Tool")
-        self.root.minsize(700, 500)
-        self.root.geometry("1100x800")
+        self.date_str = date_str
+        self.on_back = on_back
 
-        self.labeled = set()
-        if os.path.exists(OUTPUT_CSV):
-            with open(OUTPUT_CSV, newline="", encoding="utf-8") as f:
-                reader = csv.reader(f)
-                next(reader, None)
-                for row in reader:
-                    if row:
-                        self.labeled.add(row[0])
-        else:
-            with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
-                csv.writer(f).writerow(["filename", "label_id", "label_name"])
+        self.image_dir = os.path.join(IMAGE_DIR, date_str)
+
+        os.makedirs(OUTPUT_DIR, exist_ok=True)
+        self.output_csv = output_csv_path(date_str)
+
+        self.root.title(f"Traffic Image Labeling Tool - {date_str}")
+        self.root.minsize(700, 500)
+        self.root.geometry("1100x820")
+
+        if not os.path.exists(self.output_csv):
+            with open(self.output_csv, "w", newline="", encoding="utf-8") as f:
+                csv.writer(f).writerow(CSV_HEADER)
+
+        self.labeled = load_labeled_filenames(date_str)
 
         all_files = sorted(
-            f for f in os.listdir(IMAGE_DIR)
+            f for f in os.listdir(self.image_dir)
             if f.lower().endswith((".jpg", ".jpeg", ".png"))
         )
         self.remaining = [f for f in all_files if f not in self.labeled]
@@ -59,6 +165,19 @@ class LabelTool:
         self.focus_idx = None
         self.page_files = []
         self.history = []
+        self.note_rain = False
+        self.note_time = None
+
+        top_bar = tk.Frame(root)
+        top_bar.pack(fill="x", padx=10, pady=(8, 0))
+
+        back_btn = tk.Button(top_bar, text="<< Chọn ngày khác", command=self.go_back)
+        back_btn.pack(side="left")
+
+        tk.Label(
+            top_bar, text=f"Ngày: {date_str}",
+            font=("Arial", 11, "bold")
+        ).pack(side="left", padx=15)
 
         self.status_label = tk.Label(root, text="", font=("Arial", 11), wraplength=1000, justify="left")
         self.status_label.pack(pady=5, fill="x", padx=10)
@@ -72,6 +191,36 @@ class LabelTool:
         )
         self.legend_label.pack(pady=(0, 8), padx=10, fill="x")
 
+        self.note_frame = tk.Frame(root)
+        self.note_frame.pack(pady=(0, 8), padx=10, fill="x")
+
+        tk.Label(self.note_frame, text="Ghi chú áp dụng:", font=("Arial", 9, "bold")).pack(side="left", padx=(0, 10))
+
+        NOTE_CHIP_DEFAULT_BG = "#e8e8e8"
+        NOTE_CHIP_ACTIVE_BG = "#4da3ff"
+        self._note_chip_default_bg = NOTE_CHIP_DEFAULT_BG
+        self._note_chip_active_bg = NOTE_CHIP_ACTIVE_BG
+
+        def make_chip(text, on_click):
+            chip = tk.Label(
+                self.note_frame, text=text, font=("Arial", 9),
+                padx=12, pady=6, relief="raised", borderwidth=1,
+                bg=NOTE_CHIP_DEFAULT_BG, cursor="hand2"
+            )
+            chip.pack(side="left", padx=4)
+            chip.bind("<Button-1>", lambda e: on_click())
+            return chip
+
+        self.rain_btn = make_chip("Đang mưa", self.toggle_rain)
+
+        self.time_buttons = {}
+        for label in TIME_OF_DAY_OPTIONS:
+            self.time_buttons[label] = make_chip(label, lambda l=label: self.set_time_of_day(l))
+
+        clear_note_btn = make_chip("Xoá ghi chú", self.clear_notes)
+
+        self.refresh_note_buttons()
+
         self.grid_frame = tk.Frame(root)
         self.grid_frame.pack(expand=True)
 
@@ -82,6 +231,40 @@ class LabelTool:
 
         self.build_buttons()
         self.load_page()
+
+    def toggle_rain(self):
+        self.note_rain = not self.note_rain
+        self.refresh_note_buttons()
+
+    def set_time_of_day(self, label):
+        self.note_time = None if self.note_time == label else label
+        self.refresh_note_buttons()
+
+    def clear_notes(self):
+        self.note_rain = False
+        self.note_time = None
+        self.refresh_note_buttons()
+
+    def refresh_note_buttons(self):
+        default_bg = self._note_chip_default_bg
+        active_bg = self._note_chip_active_bg
+        self.rain_btn.config(bg=active_bg if self.note_rain else default_bg)
+        for label, btn in self.time_buttons.items():
+            btn.config(bg=active_bg if self.note_time == label else default_bg)
+
+    def current_note_text(self):
+        """Ghi chú dùng để LƯU vào CSV - luôn ở dạng tiếng Anh."""
+        parts = []
+        if self.note_rain:
+            parts.append(RAIN_NOTE_EN)
+        if self.note_time:
+            parts.append(TIME_OF_DAY_EN[self.note_time])
+        return ", ".join(parts)
+
+    def go_back(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
+        self.on_back()
 
     def build_buttons(self):
         self.class_buttons = []
@@ -175,7 +358,7 @@ class LabelTool:
             self.page_number = self.total_pages
 
         self.status_label.config(
-            text=f"Trang {self.page_number}/{self.total_pages}  |  "
+            text=f"Ngày: {self.date_str}  |  Trang {self.page_number}/{self.total_pages}  |  "
                  f"Đã gán: {done}/{self.total}"
         )
 
@@ -184,11 +367,11 @@ class LabelTool:
 
         if not self.page_files:
             if done >= self.total:
-                messagebox.showinfo("Hoàn tất", "Không còn ảnh nào để gán nhãn.")
+                messagebox.showinfo("Hoàn tất", "Không còn ảnh nào để gán nhãn trong ngày này.")
             return
 
         for idx, fname in enumerate(self.page_files):
-            path = os.path.join(IMAGE_DIR, fname)
+            path = os.path.join(self.image_dir, fname)
             try:
                 img = Image.open(path)
                 img.thumbnail(THUMB_SIZE)
@@ -242,12 +425,15 @@ class LabelTool:
             messagebox.showwarning("Chưa chọn ảnh", "Hãy click chọn ít nhất 1 ảnh trước.")
             return
 
+        note = self.current_note_text()
+        label_name_en = CLASS_NAME_EN.get(label_id, label_name)
         batch = []
-        with open(OUTPUT_CSV, "a", newline="", encoding="utf-8") as f:
+        with open(self.output_csv, "a", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             for idx in self.selected:
                 fname = self.page_files[idx]
-                writer.writerow([fname, label_id, label_name])
+                filepath = os.path.join(self.image_dir, fname)
+                writer.writerow([fname, label_id, label_name_en, note, filepath])
                 self.labeled.add(fname)
                 batch.append(fname)
 
@@ -263,12 +449,12 @@ class LabelTool:
         batch_set = set(batch)
         self.labeled -= batch_set
 
-        with open(OUTPUT_CSV, newline="", encoding="utf-8") as f:
+        with open(self.output_csv, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader, None)
             rows = [row for row in reader if row and row[0] not in batch_set]
 
-        with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
+        with open(self.output_csv, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             if header:
                 writer.writerow(header)
@@ -297,12 +483,37 @@ class LabelTool:
         else:
             messagebox.showinfo("Trang trước", "Đây đã là vị trí đầu tiên.")
 
+# MAIN
+def start_app():
+    root = tk.Tk()
+
+    def show_selector():
+        for widget in root.winfo_children():
+            widget.destroy()
+        root.unbind("<Configure>")
+        root.unbind("<Left>")
+        root.unbind("<Right>")
+        root.unbind("<Up>")
+        root.unbind("<Down>")
+        root.unbind("<Return>")
+        root.unbind("<Control-z>")
+        root.unbind("<Command-z>")
+        for lid, _, _ in CLASSES:
+            root.unbind(str(lid))
+        DateSelector(root, on_select=open_label_tool)
+
+    def open_label_tool(date_str):
+        for widget in root.winfo_children():
+            widget.destroy()
+        LabelTool(root, date_str, on_back=show_selector)
+
+    show_selector()
+    root.mainloop()
+
 
 if __name__ == "__main__":
     if not os.path.isdir(IMAGE_DIR):
         print(f"Không tìm thấy thư mục ảnh: {IMAGE_DIR}")
         print("Sửa biến IMAGE_DIR trong file này rồi chạy lại.")
     else:
-        root = tk.Tk()
-        app = LabelTool(root)
-        root.mainloop()
+        start_app()
