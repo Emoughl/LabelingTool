@@ -12,7 +12,7 @@ from io import BytesIO
 from datetime import datetime
 
 # CAMERA
-CAMERA_ID = "5d9ddd49766c880017188c94"
+CAMERA_ID = "b0e1faacddcc80011ceb44"
 
 BASE_URL = f"https://giaothong.hochiminhcity.gov.vn/render/ImageHandler.ashx?id={CAMERA_ID}"
 
