@@ -8,21 +8,17 @@ IMAGE_DIR = "images"
 OUTPUT_DIR = "output"
 
 CLASSES = [
-    (0, "Rất thông thoáng", "Hầu như không có xe, chạy tốc độ cao, khoảng cách xe rất lớn"),
-    (1, "Thông thoáng",     "Có xe nhưng thưa, không phải giảm tốc"),
-    (2, "Trung bình",       "Lượng xe vừa phải, bắt đầu đông nhưng vẫn di chuyển liên tục"),
-    (3, "Đông",             "Xe nhiều, di chuyển chậm, khoảng cách giữa xe nhỏ"),
-    (4, "Kẹt xe",           "Xe nối đuôi kín đường hoặc gần như đứng yên"),
+    (0, "Bình thường", "Xe di chuyển bình thường, khoảng cách xe hợp lý"),
+    (1, "Đông",         "Xe nhiều, di chuyển chậm, khoảng cách giữa xe nhỏ"),
+    (2, "Kẹt xe",       "Xe nối đuôi kín đường hoặc gần như đứng yên"),
 ]
 
 TIME_OF_DAY_OPTIONS = ["Buổi sáng", "Buổi tối"]
 
 CLASS_NAME_EN = {
-    0: "Free_Flow",
-    1: "Light_Traffic",
-    2: "Moderate_Traffic",
-    3: "Heavy_Traffic",
-    4: "Traffic_Jam",
+    0: "Normal",
+    1: "Heavy_Traffic",
+    2: "Traffic_Jam",
 }
 
 RAIN_NOTE_EN = "Rain"
@@ -32,9 +28,9 @@ TIME_OF_DAY_EN = {
     "Buổi tối": "Evening",
 }
 
-GRID_COLS = 5
-GRID_ROWS = 4
-THUMB_SIZE = (160, 120)
+GRID_COLS = 3
+GRID_ROWS = 2
+THUMB_SIZE = (340, 310)
 
 IMAGES_PER_PAGE = GRID_COLS * GRID_ROWS
 
@@ -443,7 +439,7 @@ class LabelTool:
             )
             if not proceed:
                 return
-            
+
         label_name_en = CLASS_NAME_EN.get(label_id, label_name)
         batch = []
         with open(self.output_csv, "a", newline="", encoding="utf-8") as f:
