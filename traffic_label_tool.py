@@ -282,7 +282,7 @@ class LabelTool:
 
         nav_frame = tk.Frame(self.button_frame)
         nav_frame.grid(row=1, column=0, columnspan=len(CLASSES), pady=(8, 0), sticky="ew")
-        for i in range(4):
+        for i in range(5):
             nav_frame.columnconfigure(i, weight=1)
 
         prev_btn = tk.Button(
@@ -304,11 +304,18 @@ class LabelTool:
         )
         clear_btn.grid(row=0, column=2, padx=4, sticky="ew")
 
+        delete_btn = tk.Button(
+            nav_frame, text="Xóa ảnh đã chọn", height=2, bg="#f5b0b0",
+            command=self.delete_selected
+        )
+        delete_btn.grid(row=0, column=3, padx=4, sticky="ew")
+        self.delete_btn = delete_btn
+
         next_btn = tk.Button(
             nav_frame, text="Trang sau ->", height=2, bg="#f5dfdf",
             command=self.go_next_page
         )
-        next_btn.grid(row=0, column=3, padx=4, sticky="ew")
+        next_btn.grid(row=0, column=4, padx=4, sticky="ew")
         self.next_btn = next_btn
 
         self.root.bind("<Left>", lambda e: self.move_focus(-1))
@@ -318,6 +325,8 @@ class LabelTool:
         self.root.bind("<Return>", lambda e: self.go_next_page())
         self.root.bind("<Control-z>", lambda e: self.undo_last())
         self.root.bind("<Command-z>", lambda e: self.undo_last())
+        self.root.bind("<Delete>", lambda e: self.delete_selected())
+        self.root.bind("<BackSpace>", lambda e: self.delete_selected())
 
     def on_resize(self, event):
         if event.widget != self.root:
@@ -449,6 +458,44 @@ class LabelTool:
         self.history.append(batch)
         self.load_page()
 
+    def delete_selected(self):
+        if not self.selected:
+            messagebox.showwarning("Chưa chọn ảnh", "Hãy click chọn ít nhất 1 ảnh để xóa.")
+            return
+
+        count = len(self.selected)
+        confirm = messagebox.askyesno(
+            "Xác nhận xóa",
+            f"Bạn có chắc muốn xóa {count} ảnh đã chọn khỏi thư mục?\n"
+        )
+        if not confirm:
+            return
+
+        deleted = []
+        errors = []
+        for idx in self.selected:
+            fname = self.page_files[idx]
+            filepath = os.path.join(self.image_dir, fname)
+            try:
+                os.remove(filepath)
+                deleted.append(fname)
+            except OSError as e:
+                errors.append(f"{fname}: {e}")
+
+        deleted_set = set(deleted)
+        # Cập nhật lại các danh sách nội bộ để phản ánh việc xóa
+        self.remaining = [f for f in self.remaining if f not in deleted_set]
+        self.labeled -= deleted_set
+        self.total -= len(deleted)
+
+        if errors:
+            messagebox.showerror(
+                "Lỗi khi xóa",
+                "Không thể xóa một số file:\n" + "\n".join(errors)
+            )
+
+        self.load_page()
+
     def undo_last(self):
         if not self.history:
             messagebox.showinfo("Hoàn tác", "Không còn thao tác nào để hoàn tác.")
@@ -507,6 +554,8 @@ def start_app():
         root.unbind("<Return>")
         root.unbind("<Control-z>")
         root.unbind("<Command-z>")
+        root.unbind("<Delete>")
+        root.unbind("<BackSpace>")
         for lid, _, _ in CLASSES:
             root.unbind(str(lid))
         DateSelector(root, on_select=open_label_tool)
